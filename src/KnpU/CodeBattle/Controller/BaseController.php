@@ -2,6 +2,7 @@
 
 namespace KnpU\CodeBattle\Controller;
 
+use JMS\Serializer\SerializationContext;
 use KnpU\CodeBattle\Model\Programmer;
 use KnpU\CodeBattle\Model\User;
 use KnpU\CodeBattle\Repository\UserRepository;
@@ -10,6 +11,7 @@ use Silex\Application as SilexApplication;
 use Silex\ControllerCollection;
 use Silex\ControllerProviderInterface;
 use Symfony\Component\HttpFoundation\RedirectResponse;
+use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\Security\Core\Authentication\Token\UsernamePasswordToken;
 use Symfony\Component\HttpFoundation\Request;
@@ -226,6 +228,23 @@ abstract class BaseController implements ControllerProviderInterface
     protected function getApiTokenRepository()
     {
         return $this->container['repository.api_token'];
+    }
+    protected function serialize( $data)
+    {
+        $serializerContext = new SerializationContext();
+        $serializerContext->setSerializeNull(true);
+        return $this->container['serializer']
+            ->serialize($data, 'json', $serializerContext);
+    }
+
+    protected function createApiResponse($data, $statusCode = 200)
+    {
+        $json = $this->serialize($data);
+
+        $response = new Response($json, $statusCode, array(
+            'Content-Type' => 'application/json'
+        ));
+        return $response;
     }
 
 }
