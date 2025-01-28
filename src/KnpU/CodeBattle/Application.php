@@ -7,6 +7,7 @@ use JMS\Serializer\Naming\IdenticalPropertyNamingStrategy;
 use JMS\Serializer\SerializerBuilder;
 use KnpU\CodeBattle\Api\ApiProblem;
 use KnpU\CodeBattle\Api\ApiProblemException;
+use KnpU\CodeBattle\Api\ApiProblemResponseFactory;
 use KnpU\CodeBattle\Battle\PowerManager;
 use KnpU\CodeBattle\Repository\BattleRepository;
 use KnpU\CodeBattle\Repository\ProjectRepository;
@@ -219,6 +220,9 @@ class Application extends SilexApplication
                 ->setPropertyNamingStrategy(new IdenticalPropertyNamingStrategy())
                 ->build();
         });
+        $this['api.response_factory'] = $this->share(function() use ($app) {
+            return new ApiProblemResponseFactory();
+        });
     }
 
     private function configureSecurity()
@@ -234,6 +238,7 @@ class Application extends SilexApplication
                     }),
                     'stateless' => true,
                     'anonymous' => true,
+                    'http'      =>true,
                     'api_token' => true,
                 ),
                 'main' => array(
@@ -274,7 +279,7 @@ class Application extends SilexApplication
 
             // the class that decides what should happen if no authentication credentials are passed
             $this['security.entry_point.'.$name.'.api_token'] = $app->share(function() use ($app) {
-                return new ApiEntryPoint($app['translator']);
+                return new ApiEntryPoint($app['translator'],$app['api.response_factory']);
             });
 
             return array(
@@ -330,16 +335,8 @@ class Application extends SilexApplication
                 }
             }
 
-            $data = $apiProblem->toArray();
-            // making type a URL, to a temporarily fake page
-            if ($data['type'] != 'about:blank') {
-                $data['type'] = 'http://localhost:8000/docs/errors#'.$data['type'];
-            }
-            $response = new JsonResponse(
-                $data,
-                $apiProblem->getStatusCode()
-            );
-            $response->headers->set('Content-Type', 'application/problem+json');
+
+            $response= $app['api.response_factory']->createResponse($apiProblem);
 
             return $response;
         });

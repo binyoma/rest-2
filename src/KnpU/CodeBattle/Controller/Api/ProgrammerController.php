@@ -12,6 +12,7 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use KnpU\CodeBattle\Model\Programmer;
 use Symfony\Component\HttpKernel\Exception\HttpException;
+use Symfony\Component\Security\Core\Exception\AccessDeniedException;
 
 class ProgrammerController extends BaseController
 {
@@ -35,6 +36,7 @@ class ProgrammerController extends BaseController
 
     public function newAction(Request $request)
     {
+        $this->enforceUserSecurity();
         $programmer = new Programmer();
         $this->handleRequest($request, $programmer);
 
@@ -58,7 +60,7 @@ class ProgrammerController extends BaseController
         $programmer = $this->getProgrammerRepository()->findOneByNickname($nickname);
 
         if (!$programmer) {
-            $this->throw404('Oh no! This programmer has deserted! We\'ll send a search party!');
+            $this->throw404('Not Found');
         }
         return  $this->createApiResponse($programmer,200);
     }
@@ -77,6 +79,7 @@ class ProgrammerController extends BaseController
         if (!$programmer) {
             $this->throw404('Oh no! This programmer has deserted! We\'ll send a search party!');
         }
+       $this->enforceProgrammerOwnershipSecurity($programmer);
 
         $this->handleRequest($request, $programmer);
 
@@ -93,6 +96,7 @@ class ProgrammerController extends BaseController
     public function deleteAction($nickname)
     {
         $programmer = $this->getProgrammerRepository()->findOneByNickname($nickname);
+        $this->enforceProgrammerOwnershipSecurity($programmer);
 
         if ($programmer) {
             $this->delete($programmer);
@@ -109,17 +113,8 @@ class ProgrammerController extends BaseController
      */
     private function handleRequest(Request $request, Programmer $programmer)
     {
-        $data = json_decode($request->getContent(), true);
+        $data = $this->decodeRequestBodyIntoParameters($request);
         $isNew = !$programmer->id;
-
-        if ($data === null) {
-            $problem = new ApiProblem(
-                400,
-                ApiProblem::TYPE_INVALID_REQUEST_BODY_FORMAT
-            );
-            throw new ApiProblemException($problem);
-        }
-
         // determine which properties should be changeable on this request
         $apiProperties = array('avatarNumber', 'tagLine');
         if ($isNew) {
@@ -129,15 +124,13 @@ class ProgrammerController extends BaseController
         // update the properties
         foreach ($apiProperties as $property) {
             // if a property is missing on PATCH, that's ok - just skip it
-            if (!isset($data[$property]) && $request->isMethod('PATCH')) {
+            if (!$data->has($property)  && $request->isMethod('PATCH')) {
                 continue;
             }
-
-            $val = isset($data[$property]) ? $data[$property] : null;
-            $programmer->$property = $val;
+            $programmer->$property = $data->get($property);
         }
 
-        $programmer->userId = $this->findUserByUsername('weaverryan')->id;
+        $programmer->userId = $this->getLoggedInUser()->id;
     }
 
     private function throwApiProblemValidationException(array $errors)
